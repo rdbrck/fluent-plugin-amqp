@@ -76,10 +76,17 @@ module Fluent::Plugin
         q.bind(exchange=@exchange, routing_key: @routing_key)
       end
 
-      q.subscribe do |delivery, meta, msg|
+      q.subscribe(:manual_ack => true) do |delivery, meta, msg|
         log.debug "Recieved message #{@msg}"
         payload = parse_payload(msg)
-        router.emit(parse_tag(delivery, meta), parse_time(meta), payload)
+        begin
+          router.emit(parse_tag(delivery, meta), parse_time(meta), payload)
+          log.debug "Acknowledged message #{@msg}"
+          @channel.acknowledge(delivery.delivery_tag, false)
+        rescue
+          log.debug "Requeued message #{@msg}"
+          @channel.reject(delivery.delivery_tag, true)
+        end
       end
     end # AMQPInput#run
 
